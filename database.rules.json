@@ -1,0 +1,48 @@
+{
+  "rules": {
+    "rooms": {
+      "$code": {
+        ".read": "$code.matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{6}$/)",
+        ".write": "$code.matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{6}$/)",
+        "status": {
+          ".validate": "newData.val() === 'lobby' || newData.val() === 'in_round' || newData.val() === 'ended'"
+        },
+        "endReason": {
+          ".validate": "newData.val() === 'ended' || newData.val() === 'cancelled'"
+        },
+        "endedBy": {
+          ".validate": "newData.val() === 'p1' || newData.val() === 'p2'"
+        },
+        "currentRound": {
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        },
+        "rounds": {
+          "$round": {
+            "status": {
+              ".validate": "newData.val() === 'loading' || newData.val() === 'playing' || newData.val() === 'won' || newData.val() === 'lost' || newData.val() === 'abandoned'"
+            },
+            "rematch": {
+              "p1": { ".validate": "newData.isBoolean()" },
+              "p2": { ".validate": "newData.isBoolean()" }
+            },
+            "rematchAt": {
+              "p1": { ".validate": "newData.isNumber()" },
+              "p2": { ".validate": "newData.isNumber()" }
+            },
+            "reported": {
+              "started": { ".validate": "newData.isBoolean()" },
+              "finished": { ".validate": "newData.isBoolean()" },
+              "rematchStarted": { ".validate": "newData.isBoolean()" }
+            },
+            "answers": {
+              "$index": {
+                "p1": { ".validate": "newData.val() === 'A' || newData.val() === 'B'" },
+                "p2": { ".validate": "newData.val() === 'A' || newData.val() === 'B'" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
