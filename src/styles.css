@@ -261,3 +261,44 @@ h2 { font-size: 1.3rem; line-height: 1.25; }
 }
 .share-opt:active { transform: scale(0.97); }
 .share-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; }
+
+/* ---- Clock intro, stopwatch timer ---- */
+.stopwatch { position: relative; flex: none; display: inline-block; line-height: 0; filter: drop-shadow(0 0 10px rgba(255, 126, 179, 0.45)); }
+.stopwatch svg { display: block; }
+.sw-num {
+  position: absolute; left: 0; right: 0; top: 57.1%; transform: translateY(-50%);
+  text-align: center; font-weight: 800; line-height: 1; color: #fff4ef; font-variant-numeric: tabular-nums;
+}
+.stopwatch.mini-wait { opacity: 0; } /* the big intro clock is about to land here */
+.hud { gap: 12px; }
+
+/* last urgentAtSec seconds: red and pulsing */
+.stopwatch.urgent { animation: urgent-pulse 1s ease-in-out infinite; filter: drop-shadow(0 0 12px rgba(255, 45, 85, 0.75)); }
+.stopwatch.urgent .sw-urgent { opacity: 0.6; }
+.stopwatch.urgent .sw-num { color: #ffd0d8; }
+@keyframes urgent-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+
+/* the intro overlay: a night-sky layer with the big clock in the middle */
+.intro { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+.intro-bg { position: absolute; inset: 0; background: linear-gradient(160deg, var(--bg1), var(--bg2)); opacity: 1; }
+.intro-clock { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); animation: intro-in 0.5s ease-out both; }
+.intro-text {
+  position: fixed; left: 0; right: 0; top: calc(40% + 136px); margin: 0; padding: 0 24px; text-align: center;
+  font-size: 1.2rem; font-weight: 600; color: var(--text); animation: intro-text-in 0.6s ease-out 0.25s both;
+}
+/* entry uses the separate `scale` property, so it never fights the fly-to-header transform */
+@keyframes intro-in { from { opacity: 0; scale: 0.82; } to { opacity: 1; scale: 1; } }
+@keyframes intro-text-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* while the clock flies: the backdrop and the words fade away, revealing the game that fades in behind */
+.intro.fly .intro-bg { opacity: 0; transition: opacity 0.9s ease; }
+.intro.fly .intro-text { opacity: 0; transition: opacity 0.3s ease; animation: none; }
+.intro.fade { opacity: 0; transition: opacity 0.45s ease; }
+.game-main.game-hold { opacity: 0; }
+.game-main.game-in { opacity: 1; transition: opacity 0.9s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* no shrinking or pulsing, but a plain crossfade between the clock and the game is still fine */
+  .intro.fade { transition: opacity 0.45s ease !important; }
+  .game-main.game-in { transition: opacity 0.45s ease !important; }
+  .stopwatch.urgent { animation: none !important; }
+}

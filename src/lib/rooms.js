@@ -171,7 +171,9 @@ async function writeQuestions(code, room) {
       questionSource: source,
       currentIndex: 0,
       gap: GAME_CONFIG.startGap,
-      startedAt: serverNow(),
+      // A moment in the future: both phones show the clock intro until then, so the intro never uses up game
+      // time and the countdown starts at the same instant everywhere.
+      startedAt: serverNow() + GAME_CONFIG.introMs,
       result: { matches: 0, answered: 0, durationMs: 0 },
     };
   });

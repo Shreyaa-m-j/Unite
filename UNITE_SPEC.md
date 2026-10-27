@@ -36,7 +36,7 @@ Add a `.env.example` and make sure `.env` is in `.gitignore`.
    - **By link:** opens `/room/{roomCode}`, and the room is validated as soon as the page loads.
    - **By code:** types the code on the landing page and taps **Join room**. The code is validated **only after tapping Join room** (no validation while typing). If it's valid, go to `/room/{roomCode}`. If it's invalid, stay on the landing page and show an error under the input (see 4a).
 5. **Ready:** both players are shown. When both are in, Player 1 sees **Start**, which requests questions and starts the game. Before the game starts, Player 1 has **Cancel room** and Player 2 has **Leave** (see 4c).
-6. **Game:** the timer, the track with both mascots, the current question with big A/B buttons, a status line ("Waiting for Riya…"), and after both answer a ~1.2s reveal ("You both picked Chai! 💞 +2 closer" or "Different picks 😅 a step apart").
+6. **Game:** first a short **clock intro** (section 6a): a big stopwatch showing the full game time with "You have {durationSec} seconds to unite!", which then shrinks into the header timer. After that: the timer, the track with both mascots, the current question with big A/B buttons, a status line ("Waiting for Riya…"), and after both answer a ~1.2s reveal ("You both picked Chai! 💞 +2 closer" or "Different picks 😅 a step apart").
 7. **End:**
    - **Won:** the mascots meet, with a celebration animation (hearts/confetti in CSS), questions answered, matches, and time taken.
    - **Lost:** "So close!", with the gap remaining and match rate.
@@ -60,6 +60,8 @@ export const GAME_CONFIG = {
   durationSec: 60,     // overall game timer
   questionsPerGame: 30,
   revealMs: 1200,      // how long to show the result before the next question
+  introMs: 2500,       // clock intro before the countdown starts; does NOT use up game time
+  urgentAtSec: 10,     // last N seconds: red pulsing timer
 };
 ```
 
@@ -99,7 +101,7 @@ rooms/{roomId}
       questionSource: "ai" | "fallback"
       currentIndex: number
       gap: number
-      startedAt: serverTimestamp
+      startedAt: number             // server time when the countdown begins = server time at creation + introMs (a future time)
       endedAt: serverTimestamp
       answers/
         {index}: { p1: "A"|"B", p2: "A"|"B", resolved: bool }
@@ -223,7 +225,7 @@ Simple reveal approach: the transaction marks `answers/{index}/resolved = true` 
 When a round ends (won or lost), write `result` and `endedAt` into that round. Nothing at the room level other than `currentRound` changes between rounds.
 
 ### Timer
-Use the current round's `startedAt` (server timestamp) and Firebase's `.info/serverTimeOffset` so both clients show the same countdown. Player 1's client sets the round's `status: "lost"` when time runs out, and the transaction guards it so a win can't be overwritten.
+The client that creates the round sets `startedAt = serverNow() + GAME_CONFIG.introMs` (server time via `.info/serverTimeOffset`), so the intro never uses up game time. Both clients show the intro until `startedAt`, then count down from `durationSec` using the same offset, so the countdown is identical on both. Before `startedAt` the remaining time is held at the full duration, answers are rejected (buttons disabled and `answer()` guarded), and the timeout check does not run. Player 1's client sets the round's `status: "lost"` when time runs out, and the transaction guards it so a win can't be overwritten.
 
 ### Security rules (demo level)
 Allow read/write on `rooms/{roomId}` for anyone who knows the ID, and validate basic shapes: answers at `rooms/$roomId/rounds/$round/answers/$index` must be "A" or "B". Note in the README that this is demo-level security. **Whenever `database.rules.json` changes, re-publish it in the Firebase console** (Realtime Database → Rules).
@@ -284,6 +286,17 @@ Survivors are merged, de-duplicated across the two calls, and put back in plan o
 - **Accessibility:** good contrast, visible focus states, `prefers-reduced-motion` support (turn off bounces and confetti).
 - No horizontal scrolling at 360px width.
 - Page title "Unite: think alike, come closer", favicon, and Open Graph tags (title, description) so the WhatsApp link preview looks good.
+
+### 6a. Clock intro
+
+**Clock intro** (`ClockIntro.jsx`, `Stopwatch.jsx`)
+- Shown on both phones from the moment the round is playable until `startedAt`. A night-sky overlay with a large stopwatch (190px) showing `GAME_CONFIG.durationSec` (never hard-coded) and the text "You have {durationSec} seconds to unite!".
+- After about 1.5s (`min(1500, introMs × 0.6)`) the clock shrinks and flies into the **measured** position and size of the header timer (`getBoundingClientRect`, animated with a CSS transform that lands exactly when the countdown starts), the overlay fades out and the game fades in behind it. The header timer is hidden until the clock lands.
+- The entry animation uses the `scale` property, not `transform`, so it does not fight the fly transform.
+- `prefers-reduced-motion`: no shrink or flight; the clock shows for the same time, then crossfades into the game.
+- The header timer is the same stopwatch drawing at 54px. In the last `urgentAtSec` seconds it turns red and pulses gently (pulse off under reduced motion).
+
+**No sound.** The game has no audio, no tick and no mute button. The red pulsing timer is the only urgency cue. The one-screen `/local` game has no intro.
 
 ---
 
@@ -396,6 +409,12 @@ Get each milestone working before starting the next.
 - [ ] Round 2 questions are different from round 1
 - [ ] AI questions reflect chosen interests and include clearly funny ones (~30%)
 - [ ] The fallback works when the API key is missing, and also includes funny questions
+- [ ] The intro number equals `durationSec` (set it to 90 and check both the clock and the text change)
+- [ ] The big clock lands exactly on the header timer on a phone and a laptop
+- [ ] Both phones start the countdown together, and the intro does not use up game time (the header shows the full duration when the intro ends)
+- [ ] Answers cannot be tapped during the intro
+- [ ] The timer turns red and pulses in the last 10 seconds
+- [ ] With reduced motion on, the clock crossfades with no flight
 - [ ] Looks good at 360px and on a laptop
 - [ ] PostHog events show up in the dashboard
 

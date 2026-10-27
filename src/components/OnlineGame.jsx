@@ -7,6 +7,8 @@ import Track from './Track.jsx';
 import EndScreen from './EndScreen.jsx';
 import Reveal from './Reveal.jsx';
 import Dialog from './Dialog.jsx';
+import Stopwatch from './Stopwatch.jsx';
+import ClockIntro from './ClockIntro.jsx';
 
 // `round` is rooms/{code}/rounds/{roundNo}. Mounted with key={roundNo} so local state resets on Play again.
 export default function OnlineGame({ room, round, roundNo, slot, code, offsetMs, onEndRoom }) {
@@ -28,20 +30,35 @@ export default function OnlineGame({ room, round, roundNo, slot, code, offsetMs,
   const [endBusy, setEndBusy] = useState(false);
   const [endError, setEndError] = useState('');
   const submitting = useRef(false);
+
+  // The clock intro. startedAt is in the future by introMs (set when the questions were written), so the intro
+  // never uses up game time and both phones start the countdown at the same moment.
+  const startedAt = typeof round.startedAt === 'number' ? round.startedAt : 0;
+  const introLeftAtMount = useRef(startedAt - (Date.now() + offsetMs)).current;
+  const [introOver, setIntroOver] = useState(introLeftAtMount <= 0);
+  const [gameVisible, setGameVisible] = useState(introLeftAtMount <= 0); // the game fades in as the clock flies
+  const timerRef = useRef(null); // the header stopwatch: where the big clock lands
+
   const shownAt = useRef(Date.now()); // when this question appeared for this player
   const answeredAt = useRef(null);
   const reported = useRef(new Set()); // question indexes already reported
 
   const serverNow = () => Date.now() + offsetMs;
-  const remainingMs =
-    typeof round.startedAt === 'number'
-      ? Math.max(0, round.startedAt + GAME_CONFIG.durationSec * 1000 - serverNow())
-      : GAME_CONFIG.durationSec * 1000;
+  const fullMs = GAME_CONFIG.durationSec * 1000;
+  const remainingMs = startedAt ? Math.max(0, Math.min(fullMs, startedAt + fullMs - serverNow())) : fullMs;
 
   useEffect(() => {
     if (!playing) return;
-    const t = setInterval(() => setTick((n) => n + 1), 250);
+    const t = setInterval(() => {
+      setTick((n) => n + 1);
+      // safety net: if the intro's own timer was delayed (a throttled background tab), start the game anyway
+      if (startedAt && Date.now() + offsetMs >= startedAt) {
+        setIntroOver(true);
+        setGameVisible(true);
+      }
+    }, 250);
     return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 
   useEffect(() => {
@@ -52,7 +69,7 @@ export default function OnlineGame({ room, round, roundNo, slot, code, offsetMs,
 
   // Either client may move things along; the transactions guard against doubles.
   useEffect(() => {
-    if (playing && remainingMs === 0 && typeof round.startedAt === 'number') {
+    if (playing && introOver && remainingMs === 0 && startedAt) {
       expireIfTimeUp(code, roundNo, serverNow());
     }
   });
@@ -62,7 +79,8 @@ export default function OnlineGame({ room, round, roundNo, slot, code, offsetMs,
 
   useEffect(() => {
     submitting.current = false;
-    shownAt.current = Date.now();
+    // the first question only appears once the intro is over (startedAt, in this phone's clock)
+    shownAt.current = Math.max(Date.now(), cur === 0 && startedAt ? startedAt - offsetMs : 0);
     answeredAt.current = null;
   }, [cur]);
 
@@ -112,7 +130,7 @@ export default function OnlineGame({ room, round, roundNo, slot, code, offsetMs,
   }, [round.status]);
 
   const answer = (choice) => {
-    if (submitting.current || ans[slot] || !playing) return;
+    if (submitting.current || ans[slot] || !playing || !introOver) return;
     submitting.current = true;
     answeredAt.current = Date.now();
     submitAnswer(code, roundNo, slot, choice, cur, serverNow());
@@ -216,19 +234,32 @@ export default function OnlineGame({ room, round, roundNo, slot, code, offsetMs,
   }
   if (!q) return null;
 
-  const secs = Math.ceil(remainingMs / 1000);
-  const mmss = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  const secs = introOver ? Math.ceil(remainingMs / 1000) : GAME_CONFIG.durationSec;
+  const urgent = introOver && playing && secs > 0 && secs <= GAME_CONFIG.urgentAtSec;
   const optionText = (c) => (c === 'A' ? q.a : q.b);
 
   const status = ans[slot] ? `Waiting for ${partner.name}…` : 'Pick one!';
 
   return (
-    <main className="screen">
+    <>
+    {!introOver && (
+      <ClockIntro
+        msLeft={introLeftAtMount}
+        targetRef={timerRef}
+        onFly={() => setGameVisible(true)}
+        onDone={() => {
+          setIntroOver(true);
+          setGameVisible(true);
+        }}
+      />
+    )}
+    <main className={`screen game-main ${gameVisible ? 'game-in' : 'game-hold'}`}>
       {partner.online === false && (
         <div className="banner" role="status">Partner disconnected… waiting for them to come back</div>
       )}
       <header className="hud">
-        <span className={`timer ${secs <= 15 ? 'low' : ''}`} aria-label="Time left">⏱ {mmss}</span>
+        {/* hidden until the big intro clock has landed on it, then it takes over at the same spot */}
+        <Stopwatch innerRef={timerRef} value={secs} size={54} urgent={urgent} className={introOver ? '' : 'mini-wait'} label={`${secs} seconds left`} />
         <span className="hud-count">Q{cur + 1}</span>
       </header>
       {trackEl}
@@ -255,7 +286,7 @@ export default function OnlineGame({ room, round, roundNo, slot, code, offsetMs,
           <button
             key={c}
             className={`btn ab-btn ${ans[slot] === c ? 'chosen' : ''}`}
-            disabled={Boolean(ans[slot]) || !playing}
+            disabled={Boolean(ans[slot]) || !playing || !introOver}
             onClick={() => answer(c)}
           >
             <small>{ans[slot] === c ? 'Locked in ✓' : c}</small>
@@ -264,5 +295,6 @@ export default function OnlineGame({ room, round, roundNo, slot, code, offsetMs,
         ))}
       </div>
     </main>
+    </>
   );
 }

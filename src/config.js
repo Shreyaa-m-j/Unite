@@ -6,6 +6,8 @@ export const GAME_CONFIG = {
   durationSec: 60, // overall game timer
   questionsPerGame: 30,
   revealMs: 1200, // how long to show the result before the next question
+  introMs: 2500, // clock intro before the timer starts (not taken from game time)
+  urgentAtSec: 10, // last N seconds: red pulsing timer
 };
 
 export const INTERESTS = [
